@@ -36,6 +36,7 @@
     FileInputStream FileOutputStream
     ByteArrayInputStream ByteArrayOutputStream
     PipedInputStream PipedOutputStream]
+   [java.util.concurrent.locks Lock ReentrantLock]
    [com.jcraft.jsch
     JSch Session Channel ChannelShell ChannelExec ChannelSftp JSchException
     Identity IdentityFile IdentityRepository Logger KeyPair LocalIdentityRepository]))
@@ -49,6 +50,13 @@
     com.jcraft.jsch.Logger/WARN  :warn
     com.jcraft.jsch.Logger/ERROR :error
     com.jcraft.jsch.Logger/FATAL :fatal}))
+
+(defmacro re-locking
+  [^Lock lock & forms]
+  `(try
+     (.lock ~lock)
+     ~@forms
+     (finally (.unlock ~lock))))
 
 (deftype SshLogger
    [log-level]
@@ -135,7 +143,7 @@
 (def ^:private hosts-file
   "Something to lock to tray and prevent concurrent updates/reads to
   hosts file."
-  (Object.))
+  (ReentrantLock.))
 
 (defn ssh-agent
   "Create a ssh-agent. By default a system ssh-agent is preferred."
@@ -147,7 +155,7 @@
     (when use-system-ssh-agent
       (agent/connect agent))
     (when known-hosts-path
-      (locking hosts-file
+      (re-locking hosts-file
         (.setKnownHosts agent known-hosts-path)))
     agent))
 
@@ -397,10 +405,10 @@ keys.  All other option key pairs will be passed as SSH config options."
 (defn connect
   "Connect a session."
   ([session]
-     (locking hosts-file
+     (re-locking hosts-file
        (protocols/connect session)))
   ([session timeout]
-     (locking hosts-file
+     (re-locking hosts-file
        (protocols/connect session timeout))))
 
 (defn disconnect
